@@ -180,6 +180,8 @@ namespace MySql.Data.MySqlClient
 
     #region Properties
 
+    public IsolationLevel DefaultIsolationLevel { get; set; } = IsolationLevel.RepeatableRead;
+
     /// <summary>
     /// Returns the ID of the server thread this connection is executing on.
     /// </summary>
@@ -462,32 +464,35 @@ namespace MySql.Data.MySqlClient
 
       MySqlCommand cmd = new MySqlCommand("", this);
 
-      cmd.CommandText = $"SET {scope} TRANSACTION ISOLATION LEVEL ";
-
-      switch (isolationLevel)
+      if (isolationLevel != DefaultIsolationLevel && isolationLevel != IsolationLevel.Unspecified)
       {
-        case IsolationLevel.ReadCommitted:
-          cmd.CommandText += "READ COMMITTED";
-          break;
-        case IsolationLevel.ReadUncommitted:
-          cmd.CommandText += "READ UNCOMMITTED";
-          break;
-        case IsolationLevel.Unspecified:
-        case IsolationLevel.RepeatableRead:
-          cmd.CommandText += "REPEATABLE READ";
-          break;
-        case IsolationLevel.Serializable:
-          cmd.CommandText += "SERIALIZABLE";
-          break;
-        case IsolationLevel.Chaos:
-          Throw(new NotSupportedException(Resources.ChaosNotSupported));
-          break;
-        case IsolationLevel.Snapshot:
-          Throw(new NotSupportedException(Resources.SnapshotNotSupported));
-          break;
-      }
+        cmd.CommandText = $"SET {scope} TRANSACTION ISOLATION LEVEL ";
 
-      await cmd.ExecuteNonQueryAsync(execAsync, cancellationToken).ConfigureAwait(false);
+        switch (isolationLevel)
+        {
+          case IsolationLevel.ReadCommitted:
+            cmd.CommandText += "READ COMMITTED";
+            break;
+          case IsolationLevel.ReadUncommitted:
+            cmd.CommandText += "READ UNCOMMITTED";
+            break;
+          case IsolationLevel.Unspecified:
+          case IsolationLevel.RepeatableRead:
+            cmd.CommandText += "REPEATABLE READ";
+            break;
+          case IsolationLevel.Serializable:
+            cmd.CommandText += "SERIALIZABLE";
+            break;
+          case IsolationLevel.Chaos:
+            Throw(new NotSupportedException(Resources.ChaosNotSupported));
+            break;
+          case IsolationLevel.Snapshot:
+            Throw(new NotSupportedException(Resources.SnapshotNotSupported));
+            break;
+        }
+
+        await cmd.ExecuteNonQueryAsync(execAsync, cancellationToken).ConfigureAwait(false);
+      }
       cmd.CommandText = "BEGIN";
       cmd.CommandType = CommandType.Text;
       await cmd.ExecuteNonQueryAsync(execAsync, cancellationToken).ConfigureAwait(false);
@@ -584,7 +589,7 @@ namespace MySql.Data.MySqlClient
     ///    Otherwise, it establishes a new connection to an instance of MySQL.
     ///  </para>
     /// </remarks>
-    public override void Open() =>  OpenAsync(false, CancellationToken.None).GetAwaiter().GetResult();
+    public override void Open() => OpenAsync(false, CancellationToken.None).GetAwaiter().GetResult();
 
     public override Task OpenAsync(CancellationToken cancellationToken) => OpenAsync(true, cancellationToken);
 
@@ -662,15 +667,15 @@ namespace MySql.Data.MySqlClient
         }
         else
         {
-            if (driver == null || !driver.IsOpen)
-            {
-#if NET5_0_OR_GREATER              
-                currentActivity = MySQLActivitySource.OpenConnection(currentSettings);
+          if (driver == null || !driver.IsOpen)
+          {
+#if NET5_0_OR_GREATER
+            currentActivity = MySQLActivitySource.OpenConnection(currentSettings);
 #endif
-                driver = await Driver.CreateAsync(currentSettings, execAsync, cancellationToken).ConfigureAwait(false);
-            }
+            driver = await Driver.CreateAsync(currentSettings, execAsync, cancellationToken).ConfigureAwait(false);
+          }
 
-            ProcedureCache = new ProcedureCache((int)Settings.ProcedureCacheSize);
+          ProcedureCache = new ProcedureCache((int)Settings.ProcedureCacheSize);
         }
       }
       catch (Exception ex)
